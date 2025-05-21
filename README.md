@@ -1,3 +1,222 @@
+
+Overview of the Selling Logic
+The selling strategy in your trading bot is sophisticated and comprehensive, combining multiple approaches to determine optimal exit points for tokens.
+Key Components
+Selling Strategy Engine (selling_strategy.rs):
+Handles token metrics tracking
+Evaluates sell conditions
+Manages progressive selling
+Provides market analysis
+Execution Mechanism (copy_trading.rs):
+Contains the actual execution logic for selling tokens
+Handles transaction construction and submission
+Manages progressive selling implementation
+Detailed Selling Logic
+Condition Evaluation (in selling_strategy.rs)
+The evaluate_sell_conditions method in SellingEngine is the main entry point for determining whether to sell a token, which checks:
+Time-based exits:
+```
+   if time_held > self.config.max_hold_time {
+       return Ok(true);
+   }
+```
+Take profit triggers:
+```
+   if gain >= self.config.take_profit {
+       return Ok(true);
+   }
+```
+Stop loss triggers:
+ ```
+if gain <= self.config.stop_loss {
+       return Ok(true);
+   }
+
+```
+Retracement from highs:
+```
+   if retracement >= self.config.retracement_threshold && gain > 0.0 {
+       return Ok(true);
+   }
+
+```
+Liquidity thresholds:
+```
+   if liquidity < self.config.min_liquidity {
+       return Ok(true);
+   }
+```
+Copy targets selling:
+```
+   match self.is_copy_target_selling(token_mint).await {
+       Ok(true) => return Ok(true),
+       _ => {},
+   }
+```
+## Progressive Selling Logic
+The progressive selling approach is implemented in both files:
+Configuration (in selling_strategy.rs):
+```
+   pub progressive_sell_chunks: usize, // Number of chunks to sell in
+   pub progressive_sell_interval: u64, // Seconds between sells
+```
+
+Strategy Implementation (in selling_strategy.rs):
+```
+   pub async fn progressive_sell(&self, token_mint: &str, parsed_data: &TradeInfoFromToken, protocol: SwapProtocol) -> Result<()> {
+       // Calculate optimal amount to sell
+       let total_amount = self.calculate_optimal_sell_amount(token_mint)?;
+       
+       // Calculate chunk size
+       let chunk_size = total_amount / self.config.progressive_sell_chunks as f64;
+       
+       // Call execute_sell from copy_trading with progressive sell parameters
+       match crate::engine::copy_trading::execute_sell(
+           token_mint.to_string(),
+           base_trade_info,
+           self.app_state.clone(),
+           self.swap_config.clone(),
+           protocol.clone(),
+           is_progressive_sell,
+           Some(self.config.progressive_sell_chunks),
+           Some(self.config.progressive_sell_interval * 1000), // Convert seconds to milliseconds
+       ).await {
+           // ...
+       }
+   }
+```
+Execution (in copy_trading.rs):
+```
+   pub async fn execute_sell(
+       token_mint: String,
+       trade_info: transaction_parser::TradeInfoFromToken,
+       app_state: Arc<AppState>,
+       swap_config: Arc<SwapConfig>,
+       protocol: SwapProtocol,
+       progressive_sell: bool,
+       chunks: Option<usize>,
+       interval_ms: Option<u64>,
+   ) -> Result<(), String> {
+       // If progressive sell is enabled, divide into chunks
+       if progressive_sell {
+           let chunks_count = chunks.unwrap_or(3);
+           let interval = interval_ms.unwrap_or(2000); // 2 seconds default
+           
+           // Calculate chunk size
+           let chunk_size = token_amount / chunks_count as f64;
+           
+           // Execute each chunk
+           for i in 0..chunks_count {
+               // ... chunk selling logic
+           }
+       } else {
+           // Standard single-transaction sell
+           // ... one-time sell logic
+       }
+   }
+```
+
+## Dynamic Slippage Calculation
+The system calculates slippage dynamically based on token value:
+```
+fn calculate_dynamic_slippage(&self, token_mint: &str, sell_amount: f64) -> Result<u64> {
+    // Calculate token value
+    let token_value = sell_amount * metrics.current_price;
+    
+    // More valuable tokens need higher slippage to ensure execution
+    let slippage_bps = if token_value > 10.0 {
+        300 // 3% for high value tokens (300 basis points)
+    } else if token_value > 1.0 {
+        200 // 2% for medium value tokens (200 basis points)
+    } else {
+        100 // 1% for low value tokens (100 basis points)
+    };
+    
+    Ok(slippage_bps)
+}
+
+```
+## Optimal Sell Amount Calculation
+The bot determines how much to sell based on profit percentage:
+```
+fn calculate_optimal_sell_amount(&self, token_mint: &str) -> Result<f64> {
+    // Calculate sell percentage based on PNL
+    let sell_percentage = if pnl_percentage >= 200.0 {
+        1.0 // Sell 100% if 200%+ profit
+    } else if pnl_percentage >= 100.0 {
+        0.8 // Sell 80% if 100%+ profit
+    } else if pnl_percentage >= 50.0 {
+        0.6 // Sell 60% if 50%+ profit
+    } else if pnl_percentage >= 20.0 {
+        0.5 // Sell 50% if 20%+ profit
+    } else if pnl_percentage > 0.0 {
+        0.4 // Sell 40% if any profit
+    } else {
+        0.9 // Sell 90% if at a loss
+    };
+    
+    // Calculate amount to sell
+    let amount_to_sell = amount_held * sell_percentage;
+    
+    Ok(amount_to_sell)
+}
+
+```
+## Protocol Selection
+The system can dynamically select between different protocols (PumpSwap vs PumpFun):
+```
+async fn determine_best_protocol_for_token(&self, token_mint: &str) -> Result<SwapProtocol> {
+    // Try PumpSwap first
+    let pump_swap = PumpSwap::new(/* ... */);
+    
+    match pump_swap.get_token_price(token_mint).await {
+        Ok(_) => Ok(SwapProtocol::PumpSwap),
+        Err(_) => {
+            // Try PumpFun next
+            let pump_fun = Pump::new(/* ... */);
+            
+            match pump_fun.get_token_price(token_mint).await {
+                Ok(_) => Ok(SwapProtocol::PumpFun),
+                Err(e) => Err(anyhow!("Token not found on any supported DEX: {}", e)),
+            }
+        }
+    }
+}
+
+```
+## Enhanced Token Tracking
+The system maintains comprehensive metrics on each token:
+```
+pub struct TokenMetrics {
+    pub entry_price: f64,
+    pub highest_price: f64,
+    pub lowest_price: f64,
+    pub current_price: f64,
+    pub volume_24h: f64,
+    pub market_cap: f64,
+    pub time_held: u64,
+    pub last_update: Instant,
+    pub buy_timestamp: u64,
+    pub amount_held: f64,
+    pub cost_basis: f64,
+    pub price_history: VecDeque<f64>,
+    pub volume_history: VecDeque<f64>,
+    pub liquidity_at_entry: f64,
+}
+```
+## Summary
+Current selling logic implements a sophisticated multi-factor approach to exiting positions:
+Price-based triggers - Take profit, stop loss, and trailing stops
+Risk management - Dynamic slippage and adaptive selling quantities
+Liquidity monitoring - Ensuring positions can be exited
+Progressive selling - Breaking large sells into smaller chunks to minimize impact
+Protocol flexibility - Ability to use different DEXes based on availability/liquidity
+This combination of strategies aims to maximize profits while managing risk effectively, especially important in the highly volatile environment of Solana token trading.
+
+
+
+
+
 # Solana PumpFun/PumpSwap Copy Trading Bot
 
 This is a high-performance Rust-based copy trading bot that monitors and replicates trading activity on Solana DEXs like PumpFun and PumpSwap. The bot uses advanced transaction monitoring to detect and copy trades in real-time, giving you an edge in the market.
