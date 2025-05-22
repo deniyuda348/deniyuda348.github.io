@@ -366,6 +366,62 @@ Once started, the bot will:
 - Enhanced error handling and reporting
 - Improved selling strategy implementation
 
-## Contact
 
-For questions or support, please contact the developer.
+
+
+Forced Selling Mechanism
+The force_sell_remaining_tokens function serves as a safety mechanism:
+Trigger Conditions:
+When primary sell mechanisms fail
+When stop loss thresholds are breached
+When market conditions deteriorate rapidly
+Implementation:
+Creates synthetic trade information
+Bypasses standard evaluation criteria
+Executes an immediate market sell
+Uses more aggressive slippage settings if needed
+Selling Modes
+The bot supports multiple selling strategies based on configuration:
+Normal Mode (IS_NORMAL_MODE=true):
+Sells a percentage of holdings matching the target's sell percentage
+Uses NORMAL_SELL_PERCENTAGE to determine exact amount
+Example: If target sells 50% of their holdings and NORMAL_SELL_PERCENTAGE=10, the bot sells 5% of its holdings
+Inverse Mode (IS_INVERSE_MODE=true):
+Sells all tokens when a target sells
+Independent of the percentage the target sells
+Designed for quick exit on first sell signal
+PL Mode (IS_PL_MODE=true):
+Makes selling decisions based on profit/loss metrics
+Tracks historical performance of tokens
+Uses stop-loss and take-profit percentages
+Protocol-Specific Selling Logic
+The bot adapts its selling strategy based on which DEX protocol the token uses:
+PumpFun Protocol:
+Handles bonding curve mechanics
+Calculates optimal selling timing based on reserves
+Considers fee structures specific to PumpFun
+PumpSwap Protocol:
+Considers pool reserves and depth
+Analyzes quote and base token relationship
+Optimizes for PumpSwap's unique fee structure
+Real-time Market Monitoring
+For each token the bot holds, it spawns a dedicated monitoring process that:
+Establishes a separate gRPC stream to capture all transactions involving that token
+2. Processes these transactions to update token metrics
+Continuously evaluates selling conditions
+Reacts to significant market events like large sells or depleting liquidity
+Error Handling and Retry Logic
+The selling system implements robust error handling:
+If a sell transaction fails, the system will retry with modified parameters:
+Increased slippage
+Higher priority fees
+Alternative transaction submission services (Jito, Nozomi, ZeroSlot)
+After multiple failures, the force selling mechanism kicks in as a fallback
+Notification System
+All selling events trigger Telegram notifications:
+Sell initiation
+Completed sells
+Failed sell attempts
+Force sell events
+PnL reporting
+This comprehensive selling system balances automated decision-making with the configured parameters to optimize exit points and maximize profits while managing risk
