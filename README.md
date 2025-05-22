@@ -122,6 +122,27 @@ Execution (in copy_trading.rs):
    }
 ```
 
+## Force Selling Logic
+
+```
+// Apply force sell check if enabled and the operation failed
+if result.is_err() && config.force_sell_enabled {
+    logger.log("Sell operation failed, but force sell is enabled. Attempting force sell...".yellow().to_string());
+    let sell_future = Box::pin(force_sell_remaining_tokens(token_mint.as_str(), app_state.clone(), swap_config.clone(), protocol.clone(), config.clone()));
+    
+    match sell_future.await {
+        Ok(_) => {
+            logger.log("Force sell successful after initial sell failure".green().to_string());
+            return Ok(());
+        },
+        Err(e) => {
+            logger.log(format!("Force sell also failed: {}", e).red().to_string());
+            // Continue returning the original error
+        }
+    }
+}
+```
+
 ## Dynamic Slippage Calculation
 The system calculates slippage dynamically based on token value:
 ```
