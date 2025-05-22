@@ -1,4 +1,10 @@
 
+## Monitor
+
+
+## Buy
+
+## Sell
 Overview of the Selling Logic
 The selling strategy in your trading bot is sophisticated and comprehensive, combining multiple approaches to determine optimal exit points for tokens.
 Key Components
