@@ -425,3 +425,35 @@ Failed sell attempts
 Force sell events
 PnL reporting
 This comprehensive selling system balances automated decision-making with the configured parameters to optimize exit points and maximize profits while managing risk
+
+
+Token Metrics & Performance Tracking
+Every purchased token is tracked in the TOKEN_TRACKING global state, which stores:
+Historical top PnL (profit and loss) values
+Last sell time
+Completed sell intervals for progressive selling
+Price performance data over time
+These metrics inform selling decisions through continuous updates from market data streams.
+Selling Condition Evaluation
+The bot evaluates multiple conditions before initiating a sell:
+Stop Loss Triggers: If a token's price drops below the configured stop loss percentage (default -10%), a sell is triggered immediately to limit losses.
+Take Profit Triggers: When a token reaches the configured take profit percentage (default +20%), the system initiates a sell to secure profits.
+Market Condition Analysis: The bot analyzes volume trends, price movement, and liquidity to detect market deterioration that might signal an imminent price drop.
+4. Copy Trading Signals: In copy mode, when a tracked wallet sells their tokens, the bot will evaluate whether to follow suit based on the configured sell copy percentage.
+Dynamic Exit Calculation: For each token, the bot dynamically adjusts exit points based on:
+Volatility of the specific token
+Market-wide conditions
+Time elapsed since purchase
+Volume profile changes
+Progressive Selling Implementation
+When IS_PROGRESSIVE_SELL is enabled, the bot doesn't sell all tokens at once but rather in calculated chunks:
+Chunking Algorithm: Tokens are divided into multiple sell portions (typically 3-5 chunks).
+Interval-based Execution: Sells occur at predetermined intervals to:
+Reduce price impact on low liquidity tokens
+Take advantage of price movements between sells
+Capture higher average selling price
+Adaptive Chunking: Chunk sizes are not necessarily equal but adapt based on:
+Current price relative to profit targets
+Market volatility
+Trading volume trends
+Tracking Mechanism: The completed_intervals HashSet in TokenTrackingInfo prevents duplicate sells for the same interval.
